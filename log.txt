@@ -1,0 +1,250 @@
+(cha) gdfwj@gdfwj:~/AIagant$ python run.py
+/home/gdfwj/AIagant/CHA/src/openCHA/interface/base.py:86: UserWarning: You have not specified a value for the `type` parameter. Defaulting to the 'tuples' format for chatbot messages, but this is deprecated and will be removed in a future version of Gradio. Please set type='messages' instead, which uses openai-style dictionaries with 'role' and 'content' keys.
+  chatbot = self.gr.Chatbot(bubble_full_width=False)
+* Running on local URL:  http://127.0.0.1:7860
+* To create a public link, set `share=True` in `launch()`.
+As a knowledgeable and empathetic health assistant, your primary objective is to provide the user with precise and valuable information regarding their health and well-being. Utilize the available tools effectively to answer health-related queries. Here are the tools at your disposal:
+
+-----------------------------------
+**extract_text**: Extract all the text on the current webpage
+This tool have the following outputs:
+An string containing the text of the scraped webpage.
+-----------------------------------
+
+-----------------------------------
+**affect_sleep_get**: Returns the sleep data for a specific patient over a date or a period (if two dates are provided). This will return the detailed raw data and stores it in the datapipe.
+This tool have the following outputs:
+returns an array of json objects which contains the following keys:
+**date (in milliseconds)**: epoch format
+**total_sleep_time (in minutes)**: is Total amount of sleep (a.k.a. sleep duration) registered during the sleep period.
+**awake_duration (in minutes)**: is the total amount of awake time registered during the sleep period.
+**light_sleep_duration (in minutes)**: is the total amount of light (N1 or N2) sleep registered during the sleep period.
+**rem_sleep_duration (in minutes)**: is the total amount of REM sleep registered during the sleep period.
+**deep_sleep_duration (in minutes)**: is the total amount of deep (N3) sleep registered during the sleep period.
+**sleep_onset_latency (in minutes)**: is detected latency from bedtime_start to the beginning of the firstfive minutes of persistent sleep.
+**midpoint_time_of_sleep (in minutes)**: is the time from the start of sleep to the midpoint of sleep. The midpoint ignores awake periods.
+**sleep_efficiency**: is the percentage of the sleep period spent asleep (100% * sleep duration / time in bed).
+**average_heart_rate**: is the average heart rate registered during the sleep period.
+**minimum_heart_rate**: is the lowest heart rate (5 minutes sliding average) registered during the sleep period.
+**rmssd is the average**: Root Mean Square of Successive Differences (RMSSD) registered during the sleep period.
+**average_breathing_rate**: is the average breathing rate registered during the sleep period.
+**temperature_variation**: is the skin temperature deviation from the long-term temperature average.
+- The result of this tool will be stored in the datapipe.
+-----------------------------------
+
+-----------------------------------
+**affect_sleep_analysis**: When a request for analysis of sleep data is received (such as calculating averages, sums, or identifying trends), call this analysis tool. This tool is specifically designed to handle complex data computations on sleep data records, ensuring precise and reliable results. Example: If the data spans a year and the user seeks an average sleep data, this tool will calculate the yearly average. If monthly data is needed, this task should be called multiple times for each month.
+This tool have the following outputs:
+returns an array of json objects which contains the following keys:
+**date (in milliseconds)**: epoch format
+**total_sleep_time (in minutes)**: is Total amount of sleep (a.k.a. sleep duration) registered during the sleep period.
+**awake_duration (in minutes)**: is the total amount of awake time registered during the sleep period.
+**light_sleep_duration (in minutes)**: is the total amount of light (N1 or N2) sleep registered during the sleep period.
+**rem_sleep_duration (in minutes)**: is the total amount of REM sleep registered during the sleep period.
+**deep_sleep_duration (in minutes)**: is the total amount of deep (N3) sleep registered during the sleep period.
+**sleep_onset_latency (in minutes)**: is detected latency from bedtime_start to the beginning of the firstfive minutes of persistent sleep.
+**midpoint_time_of_sleep (in minutes)**: is the time from the start of sleep to the midpoint of sleep. The midpoint ignores awake periods.
+**sleep_efficiency**: is the percentage of the sleep period spent asleep (100% * sleep duration / time in bed).
+**average_heart_rate**: is the average heart rate registered during the sleep period.
+**minimum_heart_rate**: is the lowest heart rate (5 minutes sliding average) registered during the sleep period.
+**rmssd is the average**: Root Mean Square of Successive Differences (RMSSD) registered during the sleep period.
+**average_breathing_rate**: is the average breathing rate registered during the sleep period.
+**temperature_variation**: is the skin temperature deviation from the long-term temperature average.
+- The result of this tool will be stored in the datapipe.
+-----------------------------------
+
+-----------------------------------
+**google_search**: Uses google to search the internet for the requested query and returns the url of the top website.
+This tool have the following outputs:
+It returns a json object containing key: **url**. For example: {'url': 'http://google.com'}
+-----------------------------------
+
+
+The following is the format of the information provided:
+MetaData: this contains the name of data files of different types like image, audio, video, and text. You can pass these files to tools when needed.
+History: the history of previous chats happened. Review the history for any previous responses relevant to the current query
+PreviousActions: the list of already performed actions. You should start planning knowing that these actions are performed.
+Question: the input question you must answer.
+
+Considering previously actions and their results, use the tools and provided information, first suggest three creative strategies with detailed explanation consisting of sequences of tools to properly answer the user query. Make sure the strategies are comprehensive enough and use proper tools. The tools constraints should be always satisfied. 
+After specifying the strategies, mention the pros and cons of each strategy. In the end decide the best strategy and write the detailed tool executions step by step.
+start your final decision with
+'Decision:'.
+
+Begin!
+
+MetaData:
+
+=========================
+
+=========================
+
+=========================
+USER: How to improve my sleep? I slept at 4 a.m. yesterday and 2 a.m. the day before yesterday 
+ CHA:
+
+here 1000 gpt-3.5-turbo-1106
+respp
+
+ Given the user's query, here are three strategies to properly assist the user:
+
+Strategy 1:
+1. Use the **affect_sleep_get** tool to retrieve the sleep data for the specific patient over the past two days.
+2. Analyze the sleep data using the **affect_sleep_analysis** tool to identify any patterns or trends that could be affecting the user's sleep quality.
+3. Based on the analysis, provide personalized recommendations to improve sleep quality.
+
+Strategy 2:
+1. Utilize the **extract_text** tool to gather information on general tips for improving sleep from reputable sources.
+2. Use the **google_search** tool to find specific tips and techniques for improving sleep based on the extracted information.
+3. Provide the user with a list of evidence-based strategies to enhance their sleep based on the search results.
+
+Strategy 3:
+1. Employ the **affect_sleep_get** tool to extract the sleep data for the user over the past two days.
+2. Based on the retrieved data, utilize the **google_search** tool to find expert advice or articles on improving sleep patterns.
+3. Combine the sleep data and expert advice to tailor personalized strategies for the user to improve their sleep.
+
+Pros and cons of each strategy:
+
+Strategy 1:
+Pros:
+- Provides personalized recommendations based on the user's sleep data.
+- Allows for a detailed analysis of sleep patterns and trends.
+Cons:
+- Relies solely on the user's past sleep data and may not consider external factors.
+
+Strategy 2:
+Pros:
+- Offers evidence-based tips and techniques for improving sleep from reputable sources.
+- Provides a wide range of general tips for the user to consider.
+Cons:
+- The tips provided may not be personalized to the user's specific sleep patterns and needs.
+
+Strategy 3:
+Pros:
+- Combines the user's sleep data with expert advice for a more personalized approach.
+- Considers both quantitative sleep data and qualitative expert advice.
+Cons:
+- Relies on external sources for expert advice, which may not fully align with the user's needs.
+
+Decision:
+The best strategy is Strategy 3, as it combines the user's sleep data with expert advice for a more personalized and comprehensive approach to improving sleep.
+
+Detailed tool executions for Strategy 3:
+1. Use **affect_sleep_get** to retrieve the sleep data for the user over the past two days.
+2. Capture the sleep data and utilize the **google_search** tool to find expert advice or articles on improving sleep patterns.
+3. Combine the sleep data and expert advice to tailor personalized strategies for the user to improve their sleep.
+prompt2
+
+ 
+Decision:
+
+The best strategy is Strategy 3, as it combines the user's sleep data with expert advice for a more personalized and comprehensive approach to improving sleep.
+
+Detailed tool executions for Strategy 3:
+1. Use **affect_sleep_get** to retrieve the sleep data for the user over the past two days.
+2. Capture the sleep data and utilize the **google_search** tool to find expert advice or articles on improving sleep patterns.
+3. Combine the sleep data and expert advice to tailor personalized strategies for the user to improve their sleep.
+=========================
+
+=========================
+Tools:
+
+-----------------------------------
+**extract_text**: Extract all the text on the current webpage
+  The input to this tool should be a list of data representing:
+   1-url to extract the text from. It requires links which is gathered from other tools. Never provide urls on your own.
+
+   This tool will return the following data:
+- An string containing the text of the scraped webpage.
+-----------------------------------
+
+
+-----------------------------------
+**affect_sleep_get**: Returns the sleep data for a specific patient over a date or a period (if two dates are provided). This will return the detailed raw data and stores it in the datapipe.
+  The input to this tool should be a list of data representing:
+   1-user ID in string. It can be refered as user, patient, individual, etc. Start with 'par_' following with a number (e.g., 'par_1').
+
+  2-start date of the sleep data in string with the following format: `%Y-%m-%d`
+
+  3-end date of the sleep data in string with the following format: `%Y-%m-%d`. If there is no end date, the value should be an empty string (i.e., '')
+
+   This tool will return the following data:
+- returns an array of json objects which contains the following keys:
+**date (in milliseconds)**: epoch format
+**total_sleep_time (in minutes)**: is Total amount of sleep (a.k.a. sleep duration) registered during the sleep period.
+**awake_duration (in minutes)**: is the total amount of awake time registered during the sleep period.
+**light_sleep_duration (in minutes)**: is the total amount of light (N1 or N2) sleep registered during the sleep period.
+**rem_sleep_duration (in minutes)**: is the total amount of REM sleep registered during the sleep period.
+**deep_sleep_duration (in minutes)**: is the total amount of deep (N3) sleep registered during the sleep period.
+**sleep_onset_latency (in minutes)**: is detected latency from bedtime_start to the beginning of the firstfive minutes of persistent sleep.
+**midpoint_time_of_sleep (in minutes)**: is the time from the start of sleep to the midpoint of sleep. The midpoint ignores awake periods.
+**sleep_efficiency**: is the percentage of the sleep period spent asleep (100% * sleep duration / time in bed).
+**average_heart_rate**: is the average heart rate registered during the sleep period.
+**minimum_heart_rate**: is the lowest heart rate (5 minutes sliding average) registered during the sleep period.
+**rmssd is the average**: Root Mean Square of Successive Differences (RMSSD) registered during the sleep period.
+**average_breathing_rate**: is the average breathing rate registered during the sleep period.
+**temperature_variation**: is the skin temperature deviation from the long-term temperature average.
+ The result will be stored in datapipe.
+-----------------------------------
+
+
+-----------------------------------
+**affect_sleep_analysis**: When a request for analysis of sleep data is received (such as calculating averages, sums, or identifying trends), call this analysis tool. This tool is specifically designed to handle complex data computations on sleep data records, ensuring precise and reliable results. Example: If the data spans a year and the user seeks an average sleep data, this tool will calculate the yearly average. If monthly data is needed, this task should be called multiple times for each month.
+  The input to this tool should be a list of data representing:
+   1-You should provide the data source, which is in form of datapipe:datapipe_key the datapipe_key should be extracted from the result of previous actions.
+
+  2-the analysis type which is one of **average** or **trend**.
+
+  This tool is dependent on the following tools. make sure these tools are called first: 1-affect_sleep_get
+   This tool will return the following data:
+- returns an array of json objects which contains the following keys:
+**date (in milliseconds)**: epoch format
+**total_sleep_time (in minutes)**: is Total amount of sleep (a.k.a. sleep duration) registered during the sleep period.
+**awake_duration (in minutes)**: is the total amount of awake time registered during the sleep period.
+**light_sleep_duration (in minutes)**: is the total amount of light (N1 or N2) sleep registered during the sleep period.
+**rem_sleep_duration (in minutes)**: is the total amount of REM sleep registered during the sleep period.
+**deep_sleep_duration (in minutes)**: is the total amount of deep (N3) sleep registered during the sleep period.
+**sleep_onset_latency (in minutes)**: is detected latency from bedtime_start to the beginning of the firstfive minutes of persistent sleep.
+**midpoint_time_of_sleep (in minutes)**: is the time from the start of sleep to the midpoint of sleep. The midpoint ignores awake periods.
+**sleep_efficiency**: is the percentage of the sleep period spent asleep (100% * sleep duration / time in bed).
+**average_heart_rate**: is the average heart rate registered during the sleep period.
+**minimum_heart_rate**: is the lowest heart rate (5 minutes sliding average) registered during the sleep period.
+**rmssd is the average**: Root Mean Square of Successive Differences (RMSSD) registered during the sleep period.
+**average_breathing_rate**: is the average breathing rate registered during the sleep period.
+**temperature_variation**: is the skin temperature deviation from the long-term temperature average.
+ The result will be stored in datapipe.
+-----------------------------------
+
+
+-----------------------------------
+**google_search**: Uses google to search the internet for the requested query and returns the url of the top website.
+  The input to this tool should be a list of data representing:
+   1-It should be a search query.
+
+   This tool will return the following data:
+- It returns a json object containing key: **url**. For example: {'url': 'http://google.com'}
+-----------------------------------
+
+=========================
+
+You are skilled python programmer that can solve problems and convert them into python codes. Using the selected final strategy mentioned in the 'Decision:
+', create a python code inside a ```python ``` block that outlines a sequence of steps using the Tools. assume that there is an **self.execute_task** function that can execute the tools in it. The execute_task recieves task name and an array of the inputs and returns the result. Make sure that you always pass and array as second argument. You can call tools like this: **task_result = self.execute_task('tool_name', ['input_1', 'input2', ...])**. The flow should utilize this style representing the tools available. Make sure all the execute_task calls outputs are stored in a variable.If a step's output is required as input for a subsequent step, ensure the python code captures this dependency clearly. The output variables should directly passed as inputs with no changes in the wording.
+If the tool input is a datapipe only put the variable as the input. For each tool, include necessary parameters directly without any names and assume each will return an output. The outputs' description are provided for each Tool individually. Make sure you use the directives when passing the outputs.
+
+Question: How to improve my sleep? I slept at 4 a.m. yesterday and 2 a.m. the day before yesterday
+
+here 1000 gpt-3.5-turbo-1106
+actions # Use affect_sleep_get to retrieve the sleep data for the user over the past two days
+sleep_data = self.execute_task('affect_sleep_get', ['par_1', '2023-09-05', '2023-09-06'])
+
+# Capture the sleep data and utilize the google_search tool to find expert advice or articles on improving sleep patterns
+expert_advice_url = self.execute_task('google_search', ['tips for improving sleep quality'])
+
+# Extract the text from the expert advice webpage
+expert_advice_text = self.execute_task('extract_text', [expert_advice_url['url']])
+
+# Combine the sleep data and expert advice to tailor personalized strategies for the user to improve their sleep
+personalized_strategies = sleep_data, expert_advice_text
+
+runtime {'datapipe:7b7c9bdb-d80a-454c-b4c1-d989a74323fd': False}
+here 2000 gpt-3.5-turbo-1106
