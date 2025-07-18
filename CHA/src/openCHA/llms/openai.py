@@ -190,6 +190,7 @@ class OpenAILLM(BaseLLM):
             model=model_name,
             messages=query,
             max_tokens=max_tokens,
+            store=True,
             stop=stop,
         )
         return self._parse_response(response)

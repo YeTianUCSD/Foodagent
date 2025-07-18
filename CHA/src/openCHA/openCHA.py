@@ -1,6 +1,7 @@
 import os
 from typing import List
 from typing import Tuple
+from typing import Optional
 
 from openCHA.datapipes import DatapipeType
 from openCHA.interface import Interface
@@ -20,18 +21,18 @@ from pydantic import BaseModel
 class openCHA(BaseModel):
     name: str = "openCHA"
     previous_actions: List[Action] = []
-    orchestrator: Orchestrator = None
-    planner_llm: str = LLMType.OPENAI
+    orchestrator: Optional[Orchestrator] = None
+    planner_llm: str = LLMType.LLAMA
     planner: str = PlannerType.TREE_OF_THOUGHT
     datapipe: str = DatapipeType.MEMORY
     promptist: str = ""
-    response_generator_llm: str = LLMType.OPENAI
+    response_generator_llm: str = LLMType.LLAMA
     response_generator: str = ResponseGeneratorType.BASE_GENERATOR
     meta: List[str] = []
     verbose: bool = False
 
     def _generate_history(
-        self, chat_history: List[Tuple[str, str]] = None
+        self, chat_history: Optional[List[Tuple[str, str]]] = None
     ) -> str:
         if chat_history is None:
             chat_history = []
@@ -47,8 +48,8 @@ class openCHA(BaseModel):
     def _run(
         self,
         query: str,
-        chat_history: List[Tuple[str, str]] = None,
-        tasks_list: List[str] = None,
+        chat_history: Optional[List[Tuple[str, str]]] = None,
+        tasks_list: Optional[List[str]] = None,
         use_history: bool = False,
         **kwargs,
     ) -> str:
@@ -90,10 +91,14 @@ class openCHA(BaseModel):
         message,
         openai_api_key_input,
         serp_api_key_input,
-        chat_history,
+        chat_history: Optional[List[Tuple[str, str]]],
         check_box,
-        tasks_list,
+        tasks_list: Optional[List[str]],
     ):
+        if chat_history is None:
+            chat_history = []
+        if tasks_list is None:
+            tasks_list = []
         os.environ["OPENAI_API_KEY"] = openai_api_key_input
         os.environ["SEPR_API_KEY"] = serp_api_key_input
         response = self._run(
@@ -111,11 +116,11 @@ class openCHA(BaseModel):
             for i in range(len(files)):
                 chat_history.append(
                     (
-                        message if i == 0 else None,
+                        message if i == 0 else "",
                         response[: files[i][1]],
                     )
                 )
-                chat_history.append((None, (files[i][0],)))
+                chat_history.append(("", str(files[i][0])))
                 response = response[files[i][2] :]
 
         return "", chat_history
@@ -141,8 +146,8 @@ class openCHA(BaseModel):
     def run(
         self,
         query: str,
-        chat_history: List[Tuple[str, str]] = None,
-        available_tasks: List[str] = None,
+        chat_history: Optional[List[Tuple[str, str]]] = None,
+        available_tasks: Optional[List[str]] = None,
         use_history: bool = False,
         **kwargs,
     ) -> str:
