@@ -39,7 +39,8 @@ class LlamaLLM(BaseLLM):
         "microsoft/DialoGPT-medium": 1024,
         "microsoft/DialoGPT-large": 1024,
         "gpt2": 1024,
-        "meta-llama/Meta-Llama-3.1-8B-Instruct": 8192,
+        "meta-llama/Llama-4-Scout-17B-16E-Instruct": 2**20, 
+        "meta-llama/Meta-Llama-3.1-8B-Instruct": 128000,
         "meta-llama/Meta-Llama-3-70B-Instruct": 8192,
     }
 
@@ -48,7 +49,7 @@ class LlamaLLM(BaseLLM):
     model: Any = None             # llama-cpp model
     tokenizer: Any = None         # HF tokenizer (for transformers mode)
     device: str = "cpu"
-    max_new_tokens: int = 256     # 默认生成 token 数
+    max_new_tokens: int = 1024     # 默认生成 token 数
     use_llama_cpp: bool = True    # 是否使用 llama-cpp-python
 
     #
@@ -66,7 +67,7 @@ class LlamaLLM(BaseLLM):
             values,
             "model_path",
             "LLAMA_MODEL_PATH",
-            default="~/models/Llama3.2-1B-Instruct-hf",  # 使用本地转换的 1B 模型
+            default="meta-llama/Meta-Llama-3.1-8B-Instruct",  # 使用本地转换的 1B 模型
         )
         values["model_path"] = model_path
 
@@ -135,13 +136,12 @@ class LlamaLLM(BaseLLM):
     # ──────────────────────────────────────────────────────────────────────────
     #
     def _prepare_prompt(self, prompt: str) -> str:
-        """
-        Llama-3 Instruct 使用简化的 **SYSTEM + USER** 模式。
-        这里只演示最基础的单句式：<|user|> prompt
-        你可根据需要改成多轮格式：
-            <|start_of_turn|><|user|>\n...<|end_of_turn|>
-        """
-        return prompt.strip()
+        return self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
 
     def _parse_response(self, response) -> str:
         """
@@ -190,18 +190,21 @@ class LlamaLLM(BaseLLM):
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 top_p=top_p,
-                eos_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.convert_tokens_to_ids("<|eot_id|>"),
                 pad_token_id=self.tokenizer.eos_token_id,
             )
 
-        result = self._parse_response(output_ids)
+        
+        gen_ids = output_ids[0][inputs["input_ids"].shape[-1]:]   # 把 prompt 长度切掉
+        result = self.tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+        # result = self._parse_response(output_ids)
 
-        # 简易 stop-word 截断
-        if stop:
-            if isinstance(stop, str):
-                stop = [stop]
-            for s in stop:
-                if s in result:
-                    result = result.split(s)[0]
+        # # 简易 stop-word 截断
+        # if stop:
+        #     if isinstance(stop, str):
+        #         stop = [stop]
+        #     for s in stop:
+        #         if s in result:
+        #             result = result.split(s)[0]
 
         return result.strip()

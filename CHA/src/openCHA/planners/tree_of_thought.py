@@ -260,10 +260,8 @@ Question: {input}
             query=prompt, **kwargs
         )
 
-        # 更安全的停止词处理
-        if self._stop and any(stop_word in response for stop_word in self._stop):
-            index = min([response.find(text) for text in self._stop if text in response])
-            response = response[0:index]
+        index = min([response.find(text) for text in self._stop])
+        response = response[0:index]
         actions = self.parse(response)
         print("actions", actions)
         return actions
@@ -290,5 +288,10 @@ Question: {input}
 
         """
         pattern = r"`+python\n(.*?)`+"
+        # with open("/home/gdfwj/AIagant/precode.txt", "w") as f:
+        #     f.write(query)
         code = re.search(pattern, query, re.DOTALL).group(1)
+        # with open("/home/gdfwj/AIagant/code.txt", "w") as f:
+        #     f.write(code)
+        # exit()
         return code
