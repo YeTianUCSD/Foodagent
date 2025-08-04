@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ast import Continue
 import logging
 from typing import Any
 from typing import Dict
@@ -330,14 +331,12 @@ class Orchestrator(BaseModel):
 
             [STRATEGY_CHANGE] yes|no
             [STEP_SUCCESS] yes|no
-            [STRATEGY_COMPLETE] yes|no
             [CONTENT]
             <free-form text or ```python``` block>
 
         Returns:
             strategy_change   (bool)
             step_success      (bool)
-            strategy_complete (bool)
             content           (str)  - raw text of the [CONTENT] section
 
         Side effect:
@@ -349,7 +348,7 @@ class Orchestrator(BaseModel):
         print("\n============================end of response========================================\n")
         # ---- 1. Normalise “[TAG]: value”  →  “[TAG] value” ------------------
         cleaned = re.sub(
-            r"\[(STRATEGY_CHANGE|STEP_SUCCESS|STRATEGY_COMPLETE|CONTENT)]\s*[-:]\s*",
+            r"\[(STRATEGY_CHANGE|STEP_SUCCESS|CONTENT)]\s*[-:]\s*",
             lambda m: f"[{m.group(1)}] ",
             response,
             flags=re.IGNORECASE,
@@ -357,17 +356,25 @@ class Orchestrator(BaseModel):
 
         # 2️⃣  Grab each block: everything up to the next tag or end of string
         block_re = re.compile(
-            r"\[(STRATEGY_CHANGE|STEP_SUCCESS|STRATEGY_COMPLETE|CONTENT)]"
+            r"\[(STRATEGY_CHANGE|STEP_SUCCESS|CONTENT)]"
             r"([\s\S]*?)(?=\n\s*\[(?:STRATEGY_CHANGE|STEP_SUCCESS|STRATEGY_COMPLETE|CONTENT)]|$)",
             re.IGNORECASE,
         )
         sections = {m.group(1).upper(): m.group(2).strip() for m in block_re.finditer(cleaned)}
 
 
-        expected = {"STRATEGY_CHANGE", "STEP_SUCCESS", "STRATEGY_COMPLETE", "CONTENT"}
-        missing = expected - sections.keys()
-        if missing:
-            raise ValueError(f"Missing tag(s) in response: {', '.join(sorted(missing))}")
+        expected = {"STRATEGY_CHANGE", "STEP_SUCCESS", "CONTENT"}
+        flag = False
+        for key in expected:
+            if key not in sections:
+                if key == "CONTENT":
+                    flag = True
+                else:
+                    return False, False, False
+        # missing = expected - sections.keys()
+        # if missing:
+        #     return False, False, False
+            # raise ValueError(f"Missing tag(s) in response: {', '.join(sorted(missing))}")
 
         def to_bool(txt: str) -> bool:
             txt = txt.lower().strip().split()[0]
@@ -375,11 +382,14 @@ class Orchestrator(BaseModel):
                 return True
             if txt == "no":
                 return False
+            # return False
             raise ValueError(f"Expected 'yes' or 'no', got: {txt!r}")
 
         strategy_change   = to_bool(sections["STRATEGY_CHANGE"])
         step_success      = to_bool(sections["STEP_SUCCESS"])
-        strategy_complete = to_bool(sections["STRATEGY_COMPLETE"])
+        if flag:
+            return strategy_change, step_success, ""
+        # strategy_complete = to_bool(sections["STRATEGY_COMPLETE"])
 
         # ---- 3. Pull only the first ```python``` block from CONTENT ----------
         content_block = sections["CONTENT"]
@@ -391,7 +401,7 @@ class Orchestrator(BaseModel):
 
         # ---- 4. Persist + return --------------------------------------------
         # self.current_actions_inputs = content
-        return strategy_change, step_success, strategy_complete, content
+        return strategy_change, step_success, content
 
 
     def planner_generate_prompt(self, query) -> str:
@@ -562,7 +572,7 @@ class Orchestrator(BaseModel):
             f.write("\n==========================================first strategy end================================================\n")
         times = 0
         while True:  # keep running until finished planning
-            if times>10:
+            if times>20:
                 break
             times+=1
             with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:
@@ -577,68 +587,29 @@ class Orchestrator(BaseModel):
                 previous_inputs=self.succeed_inputs,
                 previous_actions=self.succeed_actions
             )
-            strategy_change, step_success, strategy_complete, content = self.parse_evaluation_response_and_update_current_action(response)
-            if strategy_complete:
+            strategy_change, step_success, content = self.parse_evaluation_response_and_update_current_action(response)
+            if content is False:
+                continue
+            if times == 1:
+                strategy_change = False
+                step_success = False
+            if step_success:
                 assert strategy_change is False
                 self.succeed_actions.extend(self.current_actions)
                 self.succeed_inputs.append(self.current_actions_inputs)
                 break
             if strategy_change:
                 strategy = content
-            elif step_success:
-                # content = self.planner.parse(content)
-                # content = self.planner.parse(content)
-                self.succeed_actions.extend(self.current_actions)
-                self.succeed_inputs.append(self.current_actions_inputs)
-                self.current_failed_actions = []
-                self.current_failed_actions_inputs = []
-                self.current_actions_inputs = content
-                self.current_actions = []
-                self.current_actions_inputs = ""
-                with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:
-                    f.write("\n====================running code start===========================\n")
-                    f.write(content)
-                    f.write("\n====================running code end===========================\n")
-                try:
-                    exec(content, locals(), self.vars)
-                except (Exception, SystemExit) as error:
-                    self.current_actions.append("action initialze failed, error message: " + str(error) + '\n')
             else:  # failed
                 # content = self.planner.parse(content)
                 self.current_failed_actions.append(self.current_actions)
                 self.current_failed_actions_inputs.append(self.current_actions_inputs)
                 self.current_actions_inputs = content
                 self.current_actions = []
-                self.current_actions_inputs = ""
                 try:
                     exec(content, locals(), self.vars)
                 except (Exception, SystemExit) as error:
                     self.current_actions.append("action initialze failed, error message: " + str(error) + '\n')
-            # try:
-            #     self.print_log(
-            #         "planner",
-            #         f"Continueing Planning... Try number {i}\n\n",
-            #     )
-            #     # vars = {}  # should maintain vars from different steps
-            #     exec(action, locals(), self.vars)
-                
-            #     # final_response = (  # move to the end
-            #     #     self._prepare_planner_response_for_response_generator()
-            #     # )
-            #     # print("final resp", final_response)
-            #     # self.succeed_actions = []
-            #     # self.runtime = {}  # ???
-            #     break
-            # except (Exception, SystemExit) as error:
-            #     # exit()
-            #     self.print_log(
-            #         "error", f"Planning Error:\n{error}\n\n"
-            #     )
-            #     self.succeed_actions = []
-            #     i += 1
-            #     if i > self.max_retries:
-            #         final_response = "Problem preparing the answer. Please try again."
-            #         break
         
         
         print("reach to final response")
@@ -650,6 +621,7 @@ class Orchestrator(BaseModel):
             "planner",
             f"Planner final response: {final_response}\nPlanning Ended...\n\n",
         )
+        self.previous_actions.extend(self.succeed_actions)
 
         final_response = self.response_generator_generate_prompt(
             final_response=final_response,
