@@ -238,7 +238,7 @@ Question: {input}
         # if len(previous_actions) > 0:
         # prompt += "\nThought:"
         print(prompt)
-        kwargs["max_tokens"] = 1000
+        kwargs["max_tokens"] = 2000  # 增加token数量以支持更复杂的代码生成
         response = self._planner_model.generate(
             query=prompt, **kwargs
         )
@@ -255,6 +255,7 @@ Question: {input}
         )
         print("prompt2\n\n", prompt)
         kwargs["stop"] = self._stop
+        kwargs["max_tokens"] = 3000  # 为代码生成设置更高的token限制
         response = self._planner_model.generate(
             query=prompt, **kwargs
         )
@@ -287,5 +288,10 @@ Question: {input}
 
         """
         pattern = r"`+python\n(.*?)`+"
+        # with open("/home/gdfwj/AIagant/precode.txt", "w") as f:
+        #     f.write(query)
         code = re.search(pattern, query, re.DOTALL).group(1)
+        # with open("/home/gdfwj/AIagant/code.txt", "w") as f:
+        #     f.write(code)
+        # exit()
         return code

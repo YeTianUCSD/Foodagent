@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ast import Continue
 import logging
 from typing import Any
 from typing import Dict
@@ -29,7 +30,7 @@ from openCHA.tasks import BaseTask
 from openCHA.tasks import initialize_task
 from openCHA.tasks import TaskType
 from pydantic import BaseModel
-
+import re
 
 class Orchestrator(BaseModel):
     """
@@ -60,8 +61,15 @@ class Orchestrator(BaseModel):
     promptist_logger: Optional[logging.Logger] = None
     error_logger: Optional[logging.Logger] = None
     previous_actions: List[str] = []
-    current_actions: List[str] = []
+    current_actions: List[Optional[Action]] = []
+    current_actions_inputs: str = ""
+    current_failed_actions: List[str] = []
+    current_failed_actions_inputs: List[str] = []
+    succeed_inputs: List[str] = []
+    succeed_actions: List[str] = []
     runtime: Dict[str, bool] = {}
+    strategy: str = ""
+    vars: Dict[str, Any] = {}
 
     class Config:
         """Configuration for this pydantic object."""
@@ -220,9 +228,14 @@ class Orchestrator(BaseModel):
             available_tasks=tasks,
             verbose=verbose,
             previous_actions=previous_actions,
-            current_actions=[],
+            current_failed_actions=[],
+            current_failed_actions_inputs=[],
+            succeed_actions=[],
+            current_action=None,
+            current_actions_inputs="",
             planner_logger=planner_logger,
             tasks_logger=tasks_logger,
+            succeed_inputs = [], 
             orchestrator_logger=orchestrator_logger,
             final_answer_generator_logger=final_answer_generator_logger,
             promptist_logger=promptist_logger,
@@ -285,19 +298,111 @@ class Orchestrator(BaseModel):
 
             self._update_runtime(action)
 
-            self.previous_actions.append(action)
+            # self.previous_actions.append(action) move to parse evaluation response
+            # self.succeed_actions.append(action)
             self.current_actions.append(action)
             return result  # , task.return_direct
-        except Exception as e:
+        except Exception as e:  # return the exception message and store as the current action
             self.print_log(
                 "error",
                 f"Error running task: \n{e}\n---------------\n",
             )
             logging.exception(e)
             error_message = e
-            raise ValueError(
-                f"Error executing task {task_name}: {error_message}\n\nTry again with different inputs."
+            action = Action(
+                task_name=task_name,
+                task_inputs=task_inputs,
+                task_response=error_message,
+                output_type=False,
+                datapipe=self.datapipe,
             )
+            self.current_actions.append(action)
+            return error_message
+            # raise ValueError(
+            #     f"Error executing task {task_name}: {error_message}\n\nTry again with different inputs."
+            # )
+            
+    def parse_evaluation_response_and_update_current_action(
+        self,
+        response: str
+    ) -> tuple[bool, bool, bool, str]:   # (strategy_change, step_success, strategy_complete, content)
+        """
+        Parse an LLM evaluation reply produced with the four-section format:
+
+            [STRATEGY_CHANGE] yes|no
+            [STEP_SUCCESS] yes|no
+            [CONTENT]
+            <free-form text or ```python``` block>
+
+        Returns:
+            strategy_change   (bool)
+            step_success      (bool)
+            content           (str)  - raw text of the [CONTENT] section
+
+        Side effect:
+            Stores the [CONTENT] block in self.current_action (create the
+            attribute if it does not yet exist).
+        """
+        print("\n============================start of response========================================\n")
+        print(response)
+        print("\n============================end of response========================================\n")
+        # ---- 1. Normalise “[TAG]: value”  →  “[TAG] value” ------------------
+        cleaned = re.sub(
+            r"\[(STRATEGY_CHANGE|STEP_SUCCESS|CONTENT)]\s*[-:]\s*",
+            lambda m: f"[{m.group(1)}] ",
+            response,
+            flags=re.IGNORECASE,
+        )
+
+        # 2️⃣  Grab each block: everything up to the next tag or end of string
+        block_re = re.compile(
+            r"\[(STRATEGY_CHANGE|STEP_SUCCESS|CONTENT)]"
+            r"([\s\S]*?)(?=\n\s*\[(?:STRATEGY_CHANGE|STEP_SUCCESS|STRATEGY_COMPLETE|CONTENT)]|$)",
+            re.IGNORECASE,
+        )
+        sections = {m.group(1).upper(): m.group(2).strip() for m in block_re.finditer(cleaned)}
+
+
+        expected = {"STRATEGY_CHANGE", "STEP_SUCCESS", "CONTENT"}
+        flag = False
+        for key in expected:
+            if key not in sections:
+                if key == "CONTENT":
+                    flag = True
+                else:
+                    return False, False, False
+        # missing = expected - sections.keys()
+        # if missing:
+        #     return False, False, False
+            # raise ValueError(f"Missing tag(s) in response: {', '.join(sorted(missing))}")
+
+        def to_bool(txt: str) -> bool:
+            txt = txt.lower().strip().split()[0]
+            if txt == "yes":
+                return True
+            if txt == "no":
+                return False
+            # return False
+            raise ValueError(f"Expected 'yes' or 'no', got: {txt!r}")
+
+        strategy_change   = to_bool(sections["STRATEGY_CHANGE"])
+        step_success      = to_bool(sections["STEP_SUCCESS"])
+        if flag:
+            return strategy_change, step_success, ""
+        # strategy_complete = to_bool(sections["STRATEGY_COMPLETE"])
+
+        # ---- 3. Pull only the first ```python``` block from CONTENT ----------
+        content_block = sections["CONTENT"]
+        print("======content============\n")
+        print(content_block)
+        match = re.search(r"```python([\s\S]*?)``?", content_block, re.IGNORECASE)
+        # content = f"```python{match.group(1)}```" if match else ""
+        content = match.group(1)
+
+        # ---- 4. Persist + return --------------------------------------------
+        # self.current_actions_inputs = content
+        return strategy_change, step_success, content
+
 
     def planner_generate_prompt(self, query) -> str:
         """
@@ -315,7 +420,10 @@ class Orchestrator(BaseModel):
     def _prepare_planner_response_for_response_generator(self):
         print("runtime", self.runtime)
         final_response = ""
-        for action in self.current_actions:
+        print(len(self.succeed_actions))
+        if len(self.succeed_actions) == 0:
+            return ""
+        for action in self.succeed_actions:
             final_response += action.dict(
                 (
                     action.output_type
@@ -344,31 +452,31 @@ class Orchestrator(BaseModel):
         )
         return prompt
 
-    def plan(
-        self, query, history, meta, use_history, **kwargs
-    ) -> str:
-        """
-            Plan actions based on the query, history, and previous actions using the selected planner type.
-            This method generates a plan of actions based on the provided query, history, previous actions, and use_history flag.
-            It calls the plan method of the planner and returns a list of actions or plan finishes.
+    # def plan(
+    #     self, query, history, meta, use_history, **kwargs
+    # ) -> str:
+    #     """
+    #         Plan actions based on the query, history, and previous actions using the selected planner type.
+    #         This method generates a plan of actions based on the provided query, history, previous actions, and use_history flag.
+    #         It calls the plan method of the planner and returns a list of actions or plan finishes.
 
-        Args:
-            query (str): Input query.
-            history (str): History information.
-            meta (Any): meta information.
-            use_history (bool): Flag indicating whether to use history.
-        Return:
-            str: A python code block will be returnd to be executed by Task Executor.
+    #     Args:
+    #         query (str): Input query.
+    #         history (str): History information.
+    #         meta (Any): meta information.
+    #         use_history (bool): Flag indicating whether to use history.
+    #     Return:
+    #         str: A python code block will be returnd to be executed by Task Executor.
 
-        """
-        return self.planner.plan(
-            query,
-            history,
-            meta,
-            self.previous_actions,
-            use_history,
-            **kwargs,
-        )
+    #     """
+    #     return self.planner.plan(
+    #         query,
+    #         history,
+    #         meta,
+    #         self.previous_actions,
+    #         use_history,
+    #         **kwargs,
+    #     )
 
     def generate_final_answer(self, query, thinker, **kwargs) -> str:
         """
@@ -451,42 +559,71 @@ class Orchestrator(BaseModel):
         final_response = ""
         finished = False
         self.print_log("planner", "Planning Started...\n")
-        while True:
-            try:
-                self.print_log(
-                    "planner",
-                    f"Continueing Planning... Try number {i}\n\n",
-                )
-                actions = self.plan(
-                    query=prompt,
-                    history=history,
-                    meta=meta_infos,
-                    use_history=use_history,
-                    **kwargs,
-                )
-                vars = {}
-                exec(actions, locals(), vars)
-                final_response = (
-                    self._prepare_planner_response_for_response_generator()
-                )
-                # print("final resp", final_response)
-                self.current_actions = []
-                self.runtime = {}
+        strategy = self.planner.plan_strategy(  # should separate plan to 2 parts, first get the strategy, second generate code
+            query=prompt,
+            history=history,
+            meta=meta_infos,
+            use_history=use_history,
+            **kwargs,
+        )
+        with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:
+            f.write("\n==========================================first strategy start================================================\n")
+            f.write(strategy)
+            f.write("\n==========================================first strategy end================================================\n")
+        times = 0
+        while True:  # keep running until finished planning
+            if times>10:
+                self.succeed_actions.extend(self.current_actions)
+                self.succeed_inputs.append(self.current_actions_inputs)
                 break
-            except (Exception, SystemExit) as error:
-                self.print_log(
-                    "error", f"Planning Error:\n{error}\n\n"
-                )
+            times+=1
+            with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:
+                f.write(f"==================attempt {times} ==============================")
+            response = self.planner.plan_evaluation(
+                query=prompt, 
+                strategy=strategy, 
+                current_action = self.current_actions, 
+                current_action_input=self.current_actions_inputs, 
+                current_failed_actions=self.current_failed_actions, 
+                current_failed_actions_inputs=self.current_failed_actions_inputs, 
+                previous_inputs=self.succeed_inputs,
+                previous_actions=self.succeed_actions
+            )
+            strategy_change, step_success, content = self.parse_evaluation_response_and_update_current_action(response)
+            if content is False:
+                continue
+            if times == 1:
+                strategy_change = False
+                step_success = False
+            if step_success:
+                assert strategy_change is False
+                self.succeed_actions.extend(self.current_actions)
+                self.succeed_inputs.append(self.current_actions_inputs)
+                break
+            if strategy_change:
+                strategy = content
+            else:  # failed
+                # content = self.planner.parse(content)
+                self.current_failed_actions.append(self.current_actions)
+                self.current_failed_actions_inputs.append(self.current_actions_inputs)
+                self.current_actions_inputs = content
                 self.current_actions = []
-                i += 1
-                if i > self.max_retries:
-                    final_response = "Problem preparing the answer. Please try again."
-                    break
-
+                try:
+                    exec(content, locals(), self.vars)
+                except (Exception, SystemExit) as error:
+                    self.current_actions.append("action initialze failed, error message: " + str(error) + '\n')
+        
+        
+        print("reach to final response")
+        final_response = (  # move to the end
+            self._prepare_planner_response_for_response_generator()
+        )
+        print(final_response)
         self.print_log(
             "planner",
             f"Planner final response: {final_response}\nPlanning Ended...\n\n",
         )
+        self.previous_actions.extend(self.succeed_actions)
 
         final_response = self.response_generator_generate_prompt(
             final_response=final_response,

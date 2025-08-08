@@ -22,7 +22,7 @@ class GoogleSearch(BaseTask):
     outputs: List[str] = [
         "It returns a json object containing key: **url**. For example: {'url': 'http://google.com'}"
     ]
-    output_type: bool = False
+    using_example: str = "result = self.execute_task('google_search', ['[KEY_WORDS]'])"
     search_engine: Any = None
 
     @model_validator(mode="before")
