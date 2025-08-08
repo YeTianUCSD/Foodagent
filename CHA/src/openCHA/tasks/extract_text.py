@@ -25,6 +25,7 @@ class ExtractText(BaseTask):
     outputs: List[str] = [
         "An string containing the text of the scraped webpage."
     ]
+    using_example: str = "result = self.execute_task('extract_text', [result['url']])"
     output_type: bool = False
     sync_playwright: Any = None
     high_level: Any = None

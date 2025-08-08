@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yet002-a10-deployment
+  namespace: seelab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: yet002-a10
+  template:
+    metadata:
+      labels:
+        app: yet002-a10
+    spec:
+      containers:
+      - name: gpu-container
+        image: nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04
+        command: ["sleep", "infinity"]
+        resources:
+          limits:
+            cpu: "8"
+            memory: "24Gi"
+            nvidia.com/gpu: 1
+          requests:
+            cpu: "8"
+            memory: "24Gi"
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: home-volume
+          mountPath: /home
+      volumes:
+      - name: home-volume
+        persistentVolumeClaim:
+          claimName: yet002
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - NVIDIA-A10

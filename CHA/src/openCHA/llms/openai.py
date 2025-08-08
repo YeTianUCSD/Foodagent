@@ -16,6 +16,7 @@ class OpenAILLM(BaseLLM):
 
     models: Dict = {
         "gpt-4": 8192,
+        "gpt-4o": 8192, 
         "gpt-4-0314": 8192,
         "gpt-4-0613": 8192,
         "gpt-4-32k": 32768,
@@ -169,7 +170,7 @@ class OpenAILLM(BaseLLM):
 
 
         """
-        model_name = "gpt-3.5-turbo-1106"
+        model_name = "gpt-4o"
         if "model_name" in kwargs:
             model_name = kwargs["model_name"]
         if model_name not in self.get_model_names():

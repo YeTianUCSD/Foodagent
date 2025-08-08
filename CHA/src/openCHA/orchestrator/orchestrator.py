@@ -572,7 +572,9 @@ class Orchestrator(BaseModel):
             f.write("\n==========================================first strategy end================================================\n")
         times = 0
         while True:  # keep running until finished planning
-            if times>20:
+            if times>10:
+                self.succeed_actions.extend(self.current_actions)
+                self.succeed_inputs.append(self.current_actions_inputs)
                 break
             times+=1
             with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:

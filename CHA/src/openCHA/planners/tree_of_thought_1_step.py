@@ -140,7 +140,7 @@ Example of a valid answer when the task is still in progress:
 [STEP_SUCCESS] no
 [CONTENT]
 ```python
-result = self.execute_task('extract_text', [result['url']])
+{TASK_EXAMPLES}
 ````
 
 Example of a valid answer when the task has been completed:
@@ -148,6 +148,7 @@ Example of a valid answer when the task has been completed:
 [STRATEGY_CHANGE] no
 [STEP_SUCCESS] yes
 [CONTENT]
+
 
 Question: {input}
 
@@ -373,6 +374,11 @@ CHA:
                 "{previous_step_failed_actions}", self._safe_join(current_failed_actions) + '\n' + "failed inputs: \n" + self._safe_join(current_failed_actions_inputs)
             ).replace(
                 "{tool_names}", self.task_descriptions()
+            ).replace(
+                "{TASK_EXAMPLES}", "".join(
+                    task.using_example + "\n"
+                    for task in self.available_tasks if hasattr(task, 'using_example')
+                )
             )
         )
         # print("prompt2\n\n", prompt)
