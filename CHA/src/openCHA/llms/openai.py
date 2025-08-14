@@ -1,6 +1,7 @@
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List, Optional, Union, Set, ClassVar
+from pathlib import Path
+import base64
+import mimetypes
 
 from openCHA.llms import BaseLLM
 from openCHA.utils import get_from_dict_or_env
@@ -10,13 +11,17 @@ from pydantic import model_validator
 class OpenAILLM(BaseLLM):
     """
     **Description:**
-
         An implementation of the OpenAI APIs. `OpenAI API <https://platform.openai.com/docs/libraries>`_
+
+    Added:
+        - images param: accept URL or local file path to build multimodal prompts
+        - system_prompt: optional system instruction
+        - image_detail: 'low' | 'high' | 'auto' (default 'auto')
     """
 
-    models: Dict = {
-        "gpt-4": 8192,
-        "gpt-4o": 8192, 
+    models: ClassVar[Dict[str, int]] = {
+        "gpt-4o": 8192,
+        "gpt-4o-mini": 8192,
         "gpt-4-0314": 8192,
         "gpt-4-0613": 8192,
         "gpt-4-32k": 32768,
@@ -42,36 +47,33 @@ class OpenAILLM(BaseLLM):
         "code-cushman-002": 2048,
         "code-cushman-001": 2048,
     }
+
+   
+    vision_models: ClassVar[Set[str]] = {"gpt-4o", "gpt-4o-mini"}
+
     api_key: str = ""
     llm_model: Any = None
     max_tokens: int = 150
 
+    def _prepare_prompt(self, prompt: str) -> Any:
+        """
+        Backward-compatible text-only message builder required by BaseLLM.
+        Returns a single system message, matching the original behavior.
+        """
+        return [{"role": "system", "content": prompt}]
+
+
     @model_validator(mode="before")
     def validate_environment(cls, values: Dict) -> Dict:
         """
-            Validate that api key and python package exists in environment.
-
-            This method is defined as a validation model for the class and checks the required environment values for using OpenAILLM.
-            If the "openai_api_key" key exists in the input, its value is assigned to the "api_key" variable.
-            Additionally, it checksthe existence of the openai library, and if it's not found, it raises an error.
-
-        Args:
-            cls (type): The class itself.
-            values (Dict): The dictionary containing the values for validation.
-        Return:
-            Dict: The validated dictionary with updated values.
-        Raise:
-            ValueError: If the anthropic python package cannot be imported.
-
+        Validate that API key and python package exist in the environment.
         """
-
         openai_api_key = get_from_dict_or_env(
             values, "openai_api_key", "OPENAI_API_KEY"
         )
         values["api_key"] = openai_api_key
         try:
             from openai import OpenAI
-
             values["llm_model"] = OpenAI()
         except ImportError:
             raise ValueError(
@@ -81,31 +83,13 @@ class OpenAILLM(BaseLLM):
         return values
 
     def get_model_names(self) -> List[str]:
-        """
-            Get a list of available model names.
-
-        Return:
-            List[str]: A list of available model names.
-
-        """
-
-        return self.models.keys()
+        return list(self.models.keys())
 
     def is_max_token(self, model_name, query) -> bool:
         """
-            Check if the token count of the query exceeds the maximum token count for the specified model.
-
-            It calculates the number of tokens from tokenizing the input query and compares it with the maximum allowed tokens for the model.
-            If the number of tokens is greater than the maximum, it returns True.
-
-        Args:
-            model_name (str): The name of the model.
-            query (str): The query to check.
-        Return:
-            bool: True if the token count exceeds the maximum, False otherwise.
-
+        Token estimation for text prompts. When images are included,
+        this check is skipped (images are not tokenized via tiktoken).
         """
-
         model_max_token = self.models[model_name]
         try:
             import tiktoken
@@ -116,12 +100,7 @@ class OpenAILLM(BaseLLM):
                 "Please install it with `pip install tiktoken`."
             )
         encoder = "gpt2"
-        if model_name in (
-            "text-davinci-003",
-            "text-davinci-002",
-        ):
-            encoder = "p50k_base"
-        if model_name.startswith("code"):
+        if model_name in ("text-davinci-003", "text-davinci-002") or model_name.startswith("code"):
             encoder = "p50k_base"
 
         enc = tiktoken.get_encoding(encoder)
@@ -129,69 +108,131 @@ class OpenAILLM(BaseLLM):
         return model_max_token < len(tokenized_text)
 
     def _parse_response(self, response) -> str:
-        """
-            Parse the response object and return the generated completion text.
-
-        Args:
-            response (object): The response object.
-        Return:
-            str: The generated completion text.
-
-
-        """
-
         return response.choices[0].message.content
 
-    def _prepare_prompt(self, prompt) -> Any:
+    # ---------- Helpers for image handling and message construction ----------
+    def _file_to_data_url(self, path: Union[str, Path]) -> str:
+        """Convert a local image file to a data URL with inferred MIME type."""
+        p = Path(path)
+        if not p.exists() or not p.is_file():
+            raise ValueError(f"Image path not found: {path}")
+        mime, _ = mimetypes.guess_type(p.name)
+        if not mime:
+            # Default to PNG if MIME cannot be inferred
+            mime = "image/png"
+        data = p.read_bytes()
+        b64 = base64.b64encode(data).decode("utf-8")
+        return f"data:{mime};base64,{b64}"
+
+    def _build_image_content(
+        self,
+        images: List[Union[str, Path]],
+        detail: str = "auto",
+    ) -> List[Dict[str, Any]]:
         """
-            Prepare the prompt by combining the human and AI prompts with the input prompt.
-
-        Args:
-            prompt (str): The input prompt.
-        Return:
-            Any: The prepared prompt.
-
-
+        Normalize URL / local file paths into the image_url structure
+        required by chat.completions.
         """
+        contents: List[Dict[str, Any]] = []
+        for img in images:
+            if isinstance(img, (str, Path)):
+                s = str(img)
+                if s.startswith("http://") or s.startswith("https://") or s.startswith("data:"):
+                    url = s
+                else:
+                    url = self._file_to_data_url(s)
+            else:
+                raise ValueError("Each image must be a URL string or local file path/Path.")
+            contents.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": url, "detail": detail},
+                }
+            )
+        return contents
 
-        return [{"role": "system", "content": prompt}]
-
-    def generate(self, query: str, **kwargs: Any) -> str:
+    def _prepare_messages(
+        self,
+        prompt: str,
+        images: Optional[List[Union[str, Path]]] = None,
+        system_prompt: Optional[str] = None,
+        image_detail: str = "auto",
+    ) -> List[Dict[str, Any]]:
         """
-            Generate a response based on the provided query.
-
-        Args:
-            query (str): The query to generate a response for.
-            **kwargs (Any): Additional keyword arguments.
-        Return:
-            str: The generated response.
-        Raise:
-            ValueError: If the model name is not specified or is not supported.
-
-
+        Build messages depending on whether images are included.
+        - Text only: keep backward compatibility (single system message).
+        - Text + images: use user message with multimodal content array.
         """
-        model_name = "gpt-4o"
-        if "model_name" in kwargs:
-            model_name = kwargs["model_name"]
+        if images:
+            content: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
+            content.extend(self._build_image_content(images, image_detail))
+            messages: List[Dict[str, Any]] = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": content})
+            return messages
+        else:
+            # Preserve original behavior for text-only (single system message)
+            return [{"role": "system", "content": prompt}]
+
+    # ---------- Public API ----------
+    def generate(
+        self,
+        query: str,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Generate a response.
+
+        New optional kwargs:
+            images: List[str | Path]  # image URLs or local paths
+            system_prompt: str        # optional system instruction
+            image_detail: str         # 'low' | 'high' | 'auto' (default 'auto')
+        """
+        model_name = kwargs.get("model_name", "gpt-4o")
         if model_name not in self.get_model_names():
             raise ValueError(
                 "model_name is not specified or OpenAI does not support provided model_name"
             )
-        stop = kwargs["stop"] if "stop" in kwargs else None
-        max_tokens = (
-            kwargs["max_tokens"]
-            if "max_tokens" in kwargs
-            else self.max_tokens
-        )
-        print("here", max_tokens, model_name)
+
+        images = kwargs.get("images")
+        system_prompt = kwargs.get("system_prompt")
+        image_detail = kwargs.get("image_detail", "auto")
+
+        # If images are provided but model does not support vision, fail early
+        if images and model_name not in self.vision_models:
+            raise ValueError(
+                f"Model '{model_name}' does not support image understanding. "
+                f"Please use one of: {sorted(self.vision_models)}"
+            )
+
+        stop = kwargs.get("stop")
+        max_tokens = kwargs.get("max_tokens", self.max_tokens)
+
+        # For text-only prompts, optionally enforce token limit check
+        # (skip when images are present, because tiktoken doesn't count images)
+        if not images:
+            try:
+                if self.is_max_token(model_name, query):
+                    raise ValueError(
+                        f"Your prompt exceeds the max token limit for model '{model_name}'."
+                    )
+            except Exception:
+                # Do not block the call if tiktoken isn't available
+                pass
 
         self.llm_model.api_key = self.api_key
-        query = self._prepare_prompt(query)
+        messages = self._prepare_messages(
+            prompt=query,
+            images=images,
+            system_prompt=system_prompt,
+            image_detail=image_detail,
+        )
+
         response = self.llm_model.chat.completions.create(
             model=model_name,
-            messages=query,
+            messages=messages,
             max_tokens=max_tokens,
-            store=True,
             stop=stop,
         )
         return self._parse_response(response)

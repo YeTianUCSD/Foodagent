@@ -20,3 +20,4 @@ class TaskType(str, Enum):
     GOOGLE_SEARCH = "google_search"
     PARTICIPANT_INFORMATION_LOOKUP = "participant_information_lookup"
     SLEEP_DATA_LOOKUP = "sleep_data_lookup"
+    COPY_IMAGE_AND_DESCRIBE = "copy_image_and_describe"

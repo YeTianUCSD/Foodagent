@@ -9,6 +9,7 @@ from openCHA.tasks.serpapi import SerpAPI
 from openCHA.tasks.test_file import TestFile
 from openCHA.tasks.personal_info import ParticipantInfoLookup
 from openCHA.tasks.sleep_data_get import SleepDataLookup
+from openCHA.tasks.copy_image_and_describe import CopyImageAndDescribe
 from openCHA.tasks.types import TASK_TO_CLASS
 from openCHA.tasks.initialize_task import initialize_task
 
@@ -27,4 +28,5 @@ __all__ = [
     "TestFile",
     "TASK_TO_CLASS",
     "SleepDataLookup"
+    "CopyImageAndDescribe",
 ]

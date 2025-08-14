@@ -12,6 +12,7 @@ from openCHA.tasks import TaskType
 from openCHA.tasks import TestFile
 from openCHA.tasks import ParticipantInfoLookup
 from openCHA.tasks import SleepDataLookup
+from openCHA.tasks import CopyImageAndDescribe
 from openCHA.tasks.affect import ActivityAnalysis
 from openCHA.tasks.affect import ActivityGet
 from openCHA.tasks.affect import PPGAnalysis
@@ -44,4 +45,5 @@ TASK_TO_CLASS: Dict[TaskType, Type[BaseTask]] = {
     TaskType.GOOGLE_SEARCH: GoogleSearch,
     TaskType.PARTICIPANT_INFORMATION_LOOKUP: ParticipantInfoLookup,
     TaskType.SLEEP_DATA_LOOKUP: SleepDataLookup,
+    TaskType.COPY_IMAGE_AND_DESCRIBE: CopyImageAndDescribe,
 }

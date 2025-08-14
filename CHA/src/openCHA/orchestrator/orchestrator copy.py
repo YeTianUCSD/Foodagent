@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from ast import Continue
 import logging
-import os
-from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
@@ -92,7 +90,6 @@ class Orchestrator(BaseModel):
                 self.promptist_logger.debug(message)
             if log_name == "error":
                 self.error_logger.debug(message)
-
 
     @classmethod
     def initialize(
@@ -254,56 +251,6 @@ class Orchestrator(BaseModel):
 
         """
         return False
-    
-    # --- paste inside class Orchestrator(BaseModel) ---
-
-    def _extract_local_image_paths(self, text: str) -> list[str]:
-        """Extract local image file paths from free-form text.
-        Supports absolute/relative paths and quoted paths. Returns only existing files with image extensions.
-        """
-        if not text:
-            return []
-        # Split by whitespace but also handle quoted paths with spaces
-        import shlex
-        candidates = []
-        try:
-            tokens = shlex.split(text)  # handles "path with spaces.jpg"
-        except Exception:
-            tokens = text.split()
-
-        # Allow common image extensions
-        exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
-        for tok in tokens:
-            p = Path(tok).expanduser()
-            if p.is_file() and p.suffix.lower() in exts:
-                candidates.append(str(p))
-        return candidates
-
-
-    def _direct_openai_vision(self, images: list[str], user_prompt: str | None = None) -> str:
-        """Bypass planner and call OpenAI vision model directly to recognize food."""
-        # TODO: adjust the import path below to where YOUR OpenAILLM class lives.
-        # Example if your file is openCHA/llms/openai_llm.py:
-        from openCHA.llms.openai import OpenAILLM  # <-- change if needed
-
-        # Use env var OPENAI_API_KEY (or modify to pass a key explicitly)
-        llm = OpenAILLM(openai_api_key=os.environ.get("OPENAI_API_KEY", ""))
-
-        prompt = user_prompt or (
-            "Identify the food in the image and answer in Chinese. "
-            "Provide the likely name and a brief description."
-        )
-
-        return llm.generate(
-            prompt,
-            images=images,            # local file paths are supported by your OpenAILLM
-            model_name="gpt-4o",
-            image_detail="auto",
-            max_tokens=350,
-            system_prompt="You are a careful food recognition assistant. If uncertain, say so."
-        )
-
-
 
     def _update_runtime(self, action: Action = None):
         if action.output_type:
@@ -563,9 +510,6 @@ class Orchestrator(BaseModel):
                 print(e)
                 retries += 1
         return "We currently have problem processing your question. Please try again after a while."
-    
-    
-
 
     def run(
         self,
@@ -604,17 +548,6 @@ class Orchestrator(BaseModel):
                 f"The file with the name ${meta_data.split('/')[-1]}$ is stored with the key $datapipe:{key}$."
                 "Pass this key to the tools when you want to send them over to the tool\n"
             )
-        # --- EARLY BYPASS FOR LOCAL IMAGE PATHS ---
-        # If the user pastes local image file paths in the query, skip planner and call OpenAI vision directly.
-        if kwargs.get("bypass_planner_for_images", True):
-            local_images = self._extract_local_image_paths(query)
-            if local_images:
-                return self._direct_openai_vision(
-                    images=local_images,
-                    user_prompt=kwargs.get("vision_user_prompt")
-        )
-
-
         prompt = self.planner_generate_prompt(query)
         if "google_translate" in self.available_tasks:
             prompt = self.available_tasks["google_translate"].execute(
