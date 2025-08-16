@@ -24,14 +24,14 @@ class CopyImageAndDescribe(BaseTask):
     return_direct: bool = False
 
     def _execute(self, inputs: List[Any]) -> str:
-        src = inputs[0]
-        if isinstance(src, dict):  # support datapipe-decoded JSON
-            src = src.get("path") or src.get("image_path") or src.get("file") or ""
-        if not isinstance(src, str) or not src.strip():
-            raise ValueError("The image path must be a non-empty string.")
-        src = src.strip()
-        if not os.path.isfile(src):
-            raise FileNotFoundError(f"Image file not found: {src}")
-        dst = os.path.join(os.getcwd(), os.path.basename(src))
-        shutil.copy2(src, dst)
+        # src = inputs[0]
+        # if isinstance(src, dict):  # support datapipe-decoded JSON
+        #     src = src.get("path") or src.get("image_path") or src.get("file") or ""
+        # if not isinstance(src, str) or not src.strip():
+        #     raise ValueError("The image path must be a non-empty string.")
+        # src = src.strip()
+        # if not os.path.isfile(src):
+        #     raise FileNotFoundError(f"Image file not found: {src}")
+        # dst = os.path.join(os.getcwd(), os.path.basename(src))
+        # shutil.copy2(src, dst)
         return "The food in this image is bread."
