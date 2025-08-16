@@ -18,6 +18,8 @@ class CopyImageAndDescribe(BaseTask):
     )
     inputs: List[str]  = ["Absolute image path (e.g. /path/to/file.jpg) or datapipe:<key>"]
     outputs: List[str] = ["A sentence describing the food."]
+    using_example: str = "result = self.execute_task('copy_image_and_describe', ['/abs/path/to/image.jpg'])"
+
     output_type: bool  = False
     return_direct: bool = False
 
