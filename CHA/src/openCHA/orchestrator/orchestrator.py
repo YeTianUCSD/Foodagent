@@ -566,7 +566,7 @@ class Orchestrator(BaseModel):
             use_history=use_history,
             **kwargs,
         )
-        with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:
+        with open("./log/logger.txt", mode="a", encoding="utf-8") as f:
             f.write("\n==========================================first strategy start================================================\n")
             f.write(strategy)
             f.write("\n==========================================first strategy end================================================\n")
@@ -577,7 +577,7 @@ class Orchestrator(BaseModel):
                 self.succeed_inputs.append(self.current_actions_inputs)
                 break
             times+=1
-            with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:
+            with open("./log/logger.txt", mode="a", encoding="utf-8") as f:
                 f.write(f"==================attempt {times} ==============================")
             response = self.planner.plan_evaluation(
                 query=prompt, 

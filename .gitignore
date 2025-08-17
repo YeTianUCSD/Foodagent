@@ -1,2 +1,7 @@
 data/DS*
 *.csv
+*.json
+.dockerignore
+*.HEIC
+push_retry.sh
+Dockerfile

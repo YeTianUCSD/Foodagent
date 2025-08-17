@@ -333,7 +333,7 @@ CHA:
             .replace("{previous_actions}", previous_actions_prompt)
             .replace("{tool_names}", self.task_descriptions())
         )
-        with open("/home/gdfwj/AIagant/logger.txt", mode="w", encoding="utf-8") as f:
+        with open("./log/logger.txt", mode="w", encoding="utf-8") as f:
             f.write("\n==========================================first prompt start================================================\n")
             f.write(prompt)
             f.write("\n==========================================first prompt end================================================\n")
@@ -382,7 +382,7 @@ CHA:
             )
         )
         # print("prompt2\n\n", prompt)
-        with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:
+        with open("./log/logger.txt", mode="a", encoding="utf-8") as f:
             f.write("\n====================prompt start===========================\n")
             f.write(prompt)
             f.write("\n====================prompt end===========================\n")
@@ -394,7 +394,7 @@ CHA:
 
         index = min([response.find(text) for text in self._stop])
         response = response[0:index]
-        with open("/home/gdfwj/AIagant/logger.txt", mode="a", encoding="utf-8") as f:
+        with open("./log/logger.txt", mode="a", encoding="utf-8") as f:
             f.write("\n====================response start===========================\n")
             f.write(response)
             f.write("\n====================response end===========================\n")
