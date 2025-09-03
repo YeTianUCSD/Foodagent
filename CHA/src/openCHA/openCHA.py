@@ -95,14 +95,172 @@ class openCHA(BaseModel):
         check_box,
         tasks_list: Optional[List[str]],
     ):
+        """
+        Handle user input for both text and image.
+
+        Priority:
+          1) If there is an uploaded image recorded in self.meta, send BOTH the user's text (question)
+             and the image (as a data URL) to GPT-4o.
+          2) Else if the message contains an image URL (http/https/data), send both text and image URL.
+          3) Else if the message contains a local image path, convert to data URL and send both.
+          4) Otherwise, use the default orchestrator pipeline.
+
+        Notes:
+          - OpenAI servers cannot access local files via file://. I convert local files to data URLs.
+          - Gradio uploads store a temp file path in `file.name`; upload_meta() appends that to self.meta.
+        """
+        import os
+        import re
+        import base64
+        import mimetypes
+        import openai
+        from typing import Optional
+
         if chat_history is None:
             chat_history = []
         if tasks_list is None:
             tasks_list = []
+
+        # Preserve the original behavior for env vars
         os.environ["OPENAI_API_KEY"] = openai_api_key_input
-        os.environ["SEPR_API_KEY"] = serp_api_key_input
+        os.environ["SEPR_API_KEY"] = serp_api_key_input  # (typo kept to match existing code)
+
+        # ---------- helpers ----------
+        def extract_url(text: str) -> Optional[str]:
+            """Return the first http/https/data image URL found in the text."""
+            if not text:
+                return None
+            m = re.search(r"(https?://\S+|data:image/\w+;base64,[A-Za-z0-9+/=]+)", text, re.IGNORECASE)
+            if m:
+                return m.group(1).rstrip(').,;\'"')
+            return None
+
+        def extract_local_path(text: str) -> Optional[str]:
+            """Return a local image path starting at BOL or after whitespace (avoid matching https://...)."""
+            if not text:
+                return None
+            m = re.search(r"(?:(?<=\s)|^)(/[^ \n\t]+\.(?:jpg|jpeg|png|webp|gif|bmp))", text, re.IGNORECASE)
+            if m:
+                return m.group(1)
+            return None
+
+        def to_data_url(local_path: str) -> Optional[str]:
+            """Convert a local image file to a data URL; return None if unreadable."""
+            try:
+                if not os.path.exists(local_path):
+                    return None
+                mime, _ = mimetypes.guess_type(local_path)
+                if mime is None:
+                    mime = "image/jpeg"
+                with open(local_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode("utf-8")
+                return f"data:{mime};base64,{b64}"
+            except Exception:
+                return None
+
+        def strip_image_refs(text: str) -> str:
+            """Remove URLs and local paths so only the user's question remains."""
+            if not text:
+                return ""
+            t = re.sub(r"https?://\S+", "", text)  # remove URLs
+            t = re.sub(r"(?:(?<=\s)|^)(/[^ \n\t]+\.(?:jpg|jpeg|png|webp|gif|bmp))", "", t, flags=re.IGNORECASE)  # remove paths
+            return " ".join(t.split()).strip()
+
+        # ---------- gather possible image sources ----------
+        text = message or ""
+        url_in_text = extract_url(text)
+        path_in_text = extract_local_path(text)
+
+        # Also look at recently uploaded files recorded by upload_meta()
+        # We will use the *latest* image-looking path if present.
+        uploaded_path = None
+        if self.meta:
+            # take the most recent path that looks like an image file
+            for p in reversed(self.meta):
+                if isinstance(p, str) and re.search(r"\.(?:jpg|jpeg|png|webp|gif|bmp)$", p, re.IGNORECASE):
+                    uploaded_path = p
+                    break
+
+        # Build the user's question (text without raw URL/path). If empty, provide a default instruction.
+        user_question = strip_image_refs(text)
+        if not user_question:
+            user_question = "Please answer my question about this image (e.g., healthiness, ingredients, nutrition)."
+
+        client = openai.OpenAI(api_key=openai_api_key_input)
+
+        # ---------- Case 1: Prefer uploaded image (from self.meta) ----------
+        if uploaded_path:
+            data_url = to_data_url(uploaded_path)
+            if data_url is not None:
+                resp = client.chat.completions.create(
+                    model="gpt-4o-mini",  # or "gpt-4o"
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": f"{user_question}\nAnswer based on the image."},
+                                {"type": "image_url", "image_url": {"url": data_url}},
+                            ],
+                        }
+                    ],
+                )
+                answer = resp.choices[0].message.content
+                chat_history.append((f"[Uploaded Image] {uploaded_path}", answer))
+                # consume the used path once, to avoid reusing it on the next turn
+                try:
+                    self.meta.remove(uploaded_path)
+                except ValueError:
+                    pass
+                return "", chat_history
+            else:
+                # If upload path is unreadable, silently continue to other cases.
+                try:
+                    self.meta.remove(uploaded_path)
+                except ValueError:
+                    pass
+
+        # ---------- Case 2: Image URL in text ----------
+        if url_in_text:
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": f"{user_question}\nAnswer based on the image."},
+                            {"type": "image_url", "image_url": {"url": url_in_text}},
+                        ],
+                    }
+                ],
+            )
+            answer = resp.choices[0].message.content
+            chat_history.append((message, answer))
+            return "", chat_history
+
+        # ---------- Case 3: Local image path in text ----------
+        if path_in_text:
+            data_url = to_data_url(path_in_text)
+            if data_url is not None:
+                resp = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": f"{user_question}\nAnswer based on the image."},
+                                {"type": "image_url", "image_url": {"url": data_url}},
+                            ],
+                        }
+                    ],
+                )
+                answer = resp.choices[0].message.content
+                chat_history.append((message, answer))
+                return "", chat_history
+            # If we couldn't read/encode the file, fall through to text-only pipeline.
+
+        # ---------- Case 4: Default text-only pipeline ----------
         response = self._run(
-            query=message,
+            query=text,
             chat_history=chat_history,
             tasks_list=tasks_list,
             use_history=check_box,
@@ -111,12 +269,12 @@ class openCHA(BaseModel):
         files = parse_addresses(response)
 
         if len(files) == 0:
-            chat_history.append((message, response))
+            chat_history.append((text, response))
         else:
             for i in range(len(files)):
                 chat_history.append(
                     (
-                        message if i == 0 else "",
+                        text if i == 0 else "",
                         response[: files[i][1]],
                     )
                 )
@@ -124,6 +282,7 @@ class openCHA(BaseModel):
                 response = response[files[i][2] :]
 
         return "", chat_history
+
 
     def reset(self):
         self.previous_actions = []

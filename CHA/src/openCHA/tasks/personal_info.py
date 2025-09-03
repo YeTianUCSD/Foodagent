@@ -32,8 +32,12 @@ class ParticipantInfoLookup(BaseTask):
     )
 
     # ---- Internal attributes ----------------------------------------------------------
-    csv_path: str = "/home/gdfwj/AIagant/data/participant_information.csv"
+    csv_path: str = "/home/foodagent/code/Agent4Health/data/participant_information.csv"
     _df: Any = pd.read_csv(csv_path, dtype=str)  # populated in validator
+
+    #csv_path: str = "/home/foodagent/code/Agent4Health/data/participant_information.csv"
+    #_df: Any = None  
+
 
     # ---- Environment / dependency validation -----------------------------------------
     @model_validator(mode="before")
@@ -41,7 +45,7 @@ class ParticipantInfoLookup(BaseTask):
         """
         Ensures `pandas` is installed and the CSV file exists, then pre-loads it.
         """
-        values["csv_path"] = "/home/gdfwj/AIagant/data/participant_information.csv"
+        values["csv_path"] = "/home/foodagent/code/Agent4Health/data/participant_information.csv"
         try:
             import pandas as pd  # noqa: F401
         except ImportError as e:
@@ -92,7 +96,7 @@ class ParticipantInfoLookup(BaseTask):
     # ---- Human-readable explanation ---------------------------------------------------
     def explain(self) -> str:
         return (
-            "This task loads './data/participant_information.csv' once at "
+            "This task loads '/home/foodagent/code/Agent4Health/data/participant_information.csv' once at "
             "startup, then filters the DataFrame by the provided `id` and "
             "returns the matched row as a JSON object."
         )
